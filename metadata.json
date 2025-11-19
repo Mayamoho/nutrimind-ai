@@ -1,0 +1,7 @@
+{
+  "name": "NutriMind AI",
+  "description": "An interactive, personalized calorie and fitness tracker. Log meals and exercises via text, image, or voice, and receive AI-powered suggestions from Gemini to help you achieve your health goals. Visualize your progress with interactive charts and stay motivated on your wellness journey.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
