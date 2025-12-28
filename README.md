@@ -1,5 +1,5 @@
-System Requirements
-Minimum Requirements
+#System Requirements
+#Minimum Requirements
 Operating System: Windows 10/11, macOS 10.15+, or Ubuntu 18.04+
 RAM: 4GB minimum, 8GB recommended
 Storage: 2GB free disk space
@@ -45,7 +45,7 @@ Postman or similar API testing tool - for testing backend endpoints
 Installation Steps
 1. Clone the Repository
 bash
-git clone https://github.com/your-username/nutrimind-ai.git
+git clone https://github.com/Mayamoho/nutrimind-ai.git
 cd nutrimind-ai
 2. Install Frontend Dependencies
 bash
