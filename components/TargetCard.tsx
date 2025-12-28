@@ -14,12 +14,15 @@ const TargetCard: React.FC<TargetCardProps> = ({ progress }) => {
 
     // Helper to calculate progress and check if target is exceeded
     const getMacroProgress = (current: number, target: number) => {
-        if (target <= 0) return { displayPercent: '0%', isOver: false };
-        const percentage = (current / target) * 100;
+        const safeCurrent = Number(current) || 0;
+        const safeTarget = Number(target) || 1;
+        if (safeTarget <= 0) return { displayPercent: '0%', isOver: false };
+        const percentage = (safeCurrent / safeTarget) * 100;
+        const safePercentage = isNaN(percentage) ? 0 : Math.min(percentage, 100);
         return {
-            displayPercent: `${Math.min(percentage, 100)}%`,
+            displayPercent: `${safePercentage}%`,
             // Consider "over" if they exceed by more than 5% to avoid flickering on exact matches
-            isOver: percentage > 105,
+            isOver: safePercentage > 105,
         };
     };
     

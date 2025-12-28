@@ -16,7 +16,7 @@ export const ApiKeyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     useEffect(() => {
         // Check for pre-configured key from AI Studio environment first
-        const envKey = process.env.API_KEY;
+        const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.VITE_API_KEY;
         if (envKey) {
             setApiKeyState(envKey);
             setIsLoading(false);
@@ -28,11 +28,6 @@ export const ApiKeyProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
             if (storedKey) {
                 setApiKeyState(storedKey);
-            } else {
-                // As a fallback for local development, use the provided key.
-                const defaultKey = "AIzaSyAf6Phwh4EsdbSnRrMQSDwvybYH7i-guAA";
-                setApiKeyState(defaultKey);
-                localStorage.setItem(API_KEY_STORAGE_KEY, defaultKey);
             }
         } catch (error) {
             console.error("Failed to access API key from localStorage", error);

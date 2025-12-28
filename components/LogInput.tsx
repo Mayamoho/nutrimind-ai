@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { MealType, FoodLog, ExerciseLog, NutrientInfo } from '../types';
 import { analyzeFoodInput, analyzeExerciseInput } from '../services/geminiService';
 import { FoodSearch } from './FoodSearch';
@@ -12,6 +12,9 @@ import { useData } from '../contexts/DataContext';
 import Toast from './Toast';
 import { ExerciseSearch } from './ExerciseSearch';
 import { AnalysisResults } from './AnalysisResults';
+import { LogStrategy } from '../strategies/LogStrategy';
+import { FoodLogStrategy } from '../strategies/FoodLogStrategy';
+import { ExerciseLogStrategy } from '../strategies/ExerciseLogStrategy';
 
 // Redefine internal types for state management
 type FoodAnalysisResult = Omit<FoodLog, 'id' | 'timestamp'> & {
@@ -24,7 +27,6 @@ type FoodAnalysisResult = Omit<FoodLog, 'id' | 'timestamp'> & {
 type ExerciseAnalysisResult = Omit<ExerciseLog, 'id' | 'timestamp'>;
 type AnalysisResultItem = FoodAnalysisResult | ExerciseAnalysisResult;
 
-// FIX: Defined ActiveTab and LogMode types.
 type ActiveTab = 'text' | 'image' | 'voice' | 'search';
 type LogMode = 'food' | 'exercise';
 
@@ -35,16 +37,25 @@ const LogInput: React.FC = () => {
     const [query, setQuery] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedMeal, setSelectedMeal] = useState<MealType>(MealType.Breakfast);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [analysisResults, setAnalysisResults] = useState<AnalysisResultItem[] | null>(null);
+    const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+    const [selectedMeal, setSelectedMeal] = useState<MealType>(MealType.Breakfast);
+    const [isLogging, setIsLogging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // --- STRATEGY PATTERN: Instantiate strategies ---
+    const foodStrategy = useMemo(() => new FoodLogStrategy(), []);
+    const exerciseStrategy = useMemo(() => new ExerciseLogStrategy(), []);
 
     const resetAll = () => {
         setQuery('');
         setIsLoading(false);
         setError(null);
         setAnalysisResults(null);
+        setSelectedItems(new Set());
+        setSelectedMeal(MealType.Breakfast);
+        setIsLogging(false);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -56,10 +67,21 @@ const LogInput: React.FC = () => {
     };
     const { isListening, error: speechError, toggleListening } = useSpeechRecognition(onResult);
 
+    const toggleItemSelection = (index: number) => {
+        const newSelected = new Set(selectedItems);
+        if (newSelected.has(index)) {
+            newSelected.delete(index);
+        } else {
+            newSelected.add(index);
+        }
+        setSelectedItems(newSelected);
+    };
+
     const performAnalysis = async (prompt: string, image?: {inlineData: {data:string, mimeType: string}}) => {
         if (!prompt && !image) return;
 
-        const cooldownCheck = checkApiCooldown();
+        const endpoint = logMode === 'food' ? 'analyzeFood' : 'analyzeExercise';
+        const cooldownCheck = checkApiCooldown(endpoint);
         if (!cooldownCheck.canCall) {
             setError(cooldownCheck.message);
             return;
@@ -68,27 +90,46 @@ const LogInput: React.FC = () => {
         setIsLoading(true);
         setError(null);
         setAnalysisResults(null);
-        recordApiCall();
+        setSelectedItems(new Set());
+        recordApiCall(endpoint);
 
         try {
+            // --- STRATEGY PATTERN: Select and use the strategy ---
+            let strategy: LogStrategy<any>;
+            let options: any;
+
             if (logMode === 'food') {
-                const results = await analyzeFoodInput(prompt, selectedMeal, image);
-                const stateItems: FoodAnalysisResult[] = results.map(item => {
+                strategy = foodStrategy;
+                options = { mealType: selectedMeal, image };
+            } else {
+                strategy = exerciseStrategy;
+                options = { image };
+            }
+
+            const results = await strategy.analyze(prompt, options);
+
+            if (logMode === 'food') {
+                const stateItems: FoodAnalysisResult[] = results.map((item: any) => {
                     const quantity = item.servingQuantity || 1;
-                    const safeQuantity = quantity > 0 ? quantity : 1; // Avoid division by zero
+                    const safeQuantity = quantity > 0 ? quantity : 1;
                     const nutrientsPerUnit = {
                         calories: item.calories / safeQuantity,
-                        macros: item.nutrients.macros.map(m => ({ ...m, amount: m.amount / safeQuantity })),
-                        micros: item.nutrients.micros.map(m => ({ ...m, amount: m.amount / safeQuantity })),
+                        macros: (item.nutrients?.macros || []).map((m: NutrientInfo) => ({ ...m, amount: m.amount / safeQuantity })),
+                        micros: (item.nutrients?.micros || []).map((m: NutrientInfo) => ({ ...m, amount: m.amount / safeQuantity })),
                     };
                     return { ...item, nutrientsPerUnit };
                 });
                 setAnalysisResults(stateItems);
+                // Don't auto-select items - let user choose what to log
+                setSelectedItems(new Set());
             } else {
-                const result = await analyzeExerciseInput(prompt, image);
-                setAnalysisResults([result]);
+                 setAnalysisResults(results);
+                 // Don't auto-select items - let user choose what to log
+                 setSelectedItems(new Set());
             }
-            setQuery(''); // Clear text field after successful analysis
+            // --- End of Strategy Pattern usage ---
+
+            setQuery('');
         } catch (err: any) {
              console.error("Analysis failed:", err);
             let errorMessage = "Sorry, an unknown analysis error occurred. Please try again.";
@@ -120,22 +161,34 @@ const LogInput: React.FC = () => {
         const base64Data = await fileToBase64(file);
         const image = { inlineData: { data: base64Data, mimeType: file.type } };
         const prompt = logMode === 'food'
-            ? `Analyze the food in this image for ${selectedMeal}.`
+            ? "Analyze the food in this image."
             : "What exercise is this? Estimate duration and calories burned.";
         
         performAnalysis(prompt, image);
     };
     
     const handleLogResults = () => {
-        if (!analysisResults || analysisResults.length === 0) return;
+        if (!analysisResults || analysisResults.length === 0 || isLogging) return;
+        
+        setIsLogging(true);
 
         if (logMode === 'food') {
             const foodItems = analysisResults as FoodAnalysisResult[];
-            // Strip the temporary 'nutrientsPerUnit' property before logging
-            const foodItemsToLog = foodItems.map(({ nutrientsPerUnit, ...rest }) => rest);
+            const selectedFoodItems = foodItems.filter((_, index) => selectedItems.has(index));
+            const foodItemsToLog = selectedFoodItems.map(({ nutrientsPerUnit, ...rest }) => ({
+                ...rest,
+                mealType: selectedMeal
+            }));
+            
+            if (foodItemsToLog.length === 0) {
+                setToastMessage('Please select at least one item to log');
+                setIsLogging(false);
+                return;
+            }
+            
             addFood(foodItemsToLog);
-            const message = foodItems.length > 1
-                ? `${foodItems.length} food items logged successfully!`
+            const message = foodItemsToLog.length > 1
+                ? `${foodItemsToLog.length} food items logged successfully!`
                 : 'Food logged successfully!';
             setToastMessage(message);
         } else {
@@ -143,146 +196,236 @@ const LogInput: React.FC = () => {
             addExercise(exerciseItem);
             setToastMessage('Exercise added!');
         }
-        resetAll();
+        
+        setTimeout(() => {
+            resetAll();
+            setIsLogging(false);
+        }, 1000);
     };
 
-    const handleUpdateResult = (index: number, updatedData: { servingQuantity: number } | { calories: number }) => {
+    const handleUpdateResult = (index: number, updatedData: { name?: string, servingQuantity?: number, calories?: number }) => {
         if (!analysisResults) return;
         
         const newResults = [...analysisResults];
         const item = newResults[index];
         
-        // Type guard for food item update
         if ('servingQuantity' in updatedData && 'servingUnit' in item) {
-            item.servingQuantity = Math.max(0, updatedData.servingQuantity);
+            item.servingQuantity = Math.max(0, updatedData.servingQuantity || 0);
             const quantity = item.servingQuantity;
-            
-            // Recalculate total nutrients based on the new quantity
             item.calories = item.nutrientsPerUnit.calories * quantity;
             item.nutrients.macros = item.nutrientsPerUnit.macros.map(m => ({ ...m, amount: m.amount * quantity }));
             item.nutrients.micros = item.nutrientsPerUnit.micros.map(m => ({ ...m, amount: m.amount * quantity }));
-        
-        // Type guard for exercise item update
         } else if ('calories' in updatedData && 'caloriesBurned' in item) {
-            item.caloriesBurned = updatedData.calories;
+            item.caloriesBurned = updatedData.calories || 0;
         }
         
         setAnalysisResults(newResults);
     };
 
-    const handleRemoveResult = (index: number) => {
-        if (!analysisResults) return;
-        const newResults = analysisResults.filter((_, i) => i !== index);
-        if (newResults.length === 0) {
-            resetAll();
-        } else {
-            setAnalysisResults(newResults);
-        }
-    };
-
-    const tabClasses = (tabName: ActiveTab) =>
-        `px-4 py-2 font-semibold rounded-t-lg transition-colors duration-200 w-1/4 text-center ${activeTab === tabName
-            ? 'bg-white dark:bg-slate-800 text-emerald-500'
-            : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-        }`;
-
     return (
-        <div className="bg-white dark:bg-slate-800 p-1 rounded-2xl shadow-lg relative min-h-[350px]">
-             {isLoading && (
-                <div className="absolute inset-0 bg-white/70 dark:bg-slate-800/70 flex flex-col justify-center items-center z-10 rounded-2xl">
-                    <Spinner />
-                    <p className="mt-2 font-semibold text-slate-600 dark:text-slate-300">Analyzing...</p>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-lg">
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Log Your Day</h2>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setLogMode('food')}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            logMode === 'food' 
+                                ? 'bg-emerald-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Food
+                    </button>
+                    <button
+                        onClick={() => setLogMode('exercise')}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            logMode === 'exercise' 
+                                ? 'bg-orange-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Exercise
+                    </button>
                 </div>
-            )}
-            {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
-            <div className="flex border-b border-slate-200 dark:border-slate-700">
-                <button className={tabClasses('text')} onClick={() => setActiveTab('text')}>Text</button>
-                <button className={tabClasses('image')} onClick={() => setActiveTab('image')}>Image</button>
-                <button className={tabClasses('voice')} onClick={() => setActiveTab('voice')}>Voice</button>
-                <button className={tabClasses('search')} onClick={() => setActiveTab('search')}>Search</button>
             </div>
 
-            <div className="p-4">
-                {analysisResults ? (
-                     <AnalysisResults
+            {logMode === 'food' && (
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Meal Type</label>
+                    <select
+                        value={selectedMeal}
+                        onChange={(e) => setSelectedMeal(e.target.value as MealType)}
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                    >
+                        <option value={MealType.Breakfast}>Breakfast</option>
+                        <option value={MealType.Lunch}>Lunch</option>
+                        <option value={MealType.Dinner}>Dinner</option>
+                        <option value={MealType.Snacks}>Snacks</option>
+                    </select>
+                </div>
+            )}
+
+            <div className="mb-4">
+                <div className="flex gap-2 mb-4">
+                    <button
+                        onClick={() => setActiveTab('text')}
+                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
+                            activeTab === 'text' 
+                                ? 'bg-blue-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Text
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('image')}
+                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
+                            activeTab === 'image' 
+                                ? 'bg-purple-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Image
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('voice')}
+                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
+                            activeTab === 'voice' 
+                                ? 'bg-green-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Voice
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('search')}
+                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
+                            activeTab === 'search' 
+                                ? 'bg-indigo-500 text-white' 
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                        }`}
+                    >
+                        Search
+                    </button>
+                </div>
+
+                {activeTab === 'text' && (
+                    <div className="space-y-4">
+                        <textarea
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder={`Describe your ${logMode === 'food' ? 'meal' : 'exercise'}...`}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white resize-none"
+                            rows={3}
+                        />
+                        <button
+                            onClick={() => handleSubmit(query)}
+                            disabled={!query.trim() || isLoading}
+                            className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {isLoading ? <Spinner /> : `Analyze ${logMode === 'food' ? 'Food' : 'Exercise'}`}
+                        </button>
+                    </div>
+                )}
+
+                {activeTab === 'image' && (
+                    <div className="space-y-4">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            className="hidden"
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isLoading}
+                            className="w-full py-8 px-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                        >
+                            <CameraIcon />
+                            <span className="block mt-2">Click to upload image</span>
+                        </button>
+                    </div>
+                )}
+
+                {activeTab === 'voice' && (
+                    <div className="space-y-4">
+                        <button
+                            onClick={toggleListening}
+                            disabled={isLoading}
+                            className={`w-full py-8 px-4 rounded-lg font-medium transition-colors ${
+                                isListening 
+                                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                                    : 'bg-green-500 text-white hover:bg-green-600'
+                            }`}
+                        >
+                            <MicIcon />
+                            <span className="block mt-2">
+                                {isListening ? 'Stop Recording' : 'Start Recording'}
+                            </span>
+                        </button>
+                        {query && (
+                            <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                                <p className="text-sm text-slate-600 dark:text-slate-400">You said:</p>
+                                <p className="text-slate-900 dark:text-white">{query}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'search' && (
+                    <div>
+                        {logMode === 'food' ? (
+                            <FoodSearch onAddFood={(foods) => addFood(foods)} />
+                        ) : (
+                            <ExerciseSearch onAddExercise={(ex) => addExercise(ex)} />
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-red-700 dark:text-red-400">{error}</p>
+                </div>
+            )}
+
+            {analysisResults && (
+                <div className="mt-6">
+                    <AnalysisResults
                         results={analysisResults}
                         logMode={logMode}
                         onLog={handleLogResults}
                         onClear={resetAll}
                         onUpdate={handleUpdateResult}
-                        onRemove={handleRemoveResult}
+                        onRemove={(index) => {
+                            if (analysisResults.length > 1) {
+                                const newResults = analysisResults.filter((_, i) => i !== index);
+                                setAnalysisResults(newResults);
+                                // Update selected items indices
+                                const newSelected = new Set<number>();
+                                selectedItems.forEach(itemIndex => {
+                                    if (itemIndex < index) {
+                                        newSelected.add(itemIndex);
+                                    } else if (itemIndex > index) {
+                                        newSelected.add(itemIndex - 1);
+                                    }
+                                });
+                                setSelectedItems(newSelected);
+                            } else {
+                                resetAll();
+                            }
+                        }}
+                        selectedItems={selectedItems}
+                        onToggleSelection={toggleItemSelection}
                     />
-                ) : (
-                    <>
-                        <div className="flex items-center justify-center gap-4 mb-4">
-                            <span className="font-semibold">I want to log:</span>
-                            <div className="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1">
-                                <button onClick={() => setLogMode('food')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${logMode === 'food' ? 'bg-emerald-500 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Food</button>
-                                <button onClick={() => setLogMode('exercise')} className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${logMode === 'exercise' ? 'bg-emerald-500 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Exercise</button>
-                            </div>
-                        </div>
+                </div>
+            )}
 
-                        {logMode === 'food' && (activeTab === 'text' || activeTab === 'image' || activeTab === 'voice') && (
-                            <div className="flex flex-wrap gap-2 mb-4 justify-center">
-                                {Object.values(MealType).map(meal => (
-                                    <button key={meal} type="button" onClick={() => setSelectedMeal(meal)}
-                                        className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${selectedMeal === meal
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-emerald-100 dark:hover:bg-slate-600'
-                                        }`}>
-                                        {meal}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                        
-                        {activeTab === 'text' && (
-                            <form onSubmit={(e) => { e.preventDefault(); handleSubmit(query); }} className="space-y-2">
-                                <textarea
-                                    value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    placeholder={logMode === 'food' ? "e.g., '1 bowl of oatmeal with berries and nuts'" : "e.g., 'went for a 30 minute run'"}
-                                    className="w-full p-3 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 border-transparent focus:ring-emerald-500 focus:border-emerald-500 rounded-lg transition"
-                                    rows={3}
-                                />
-                                <button type="submit" className="w-full bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-600 transition-colors disabled:bg-slate-400" disabled={!query}>
-                                    Analyze
-                                </button>
-                            </form>
-                        )}
-
-                        {activeTab === 'image' && (
-                            <div className="text-center">
-                                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                                <button onClick={() => fileInputRef.current?.click()} className="w-full flex justify-center items-center gap-2 bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-600 transition-colors">
-                                    <CameraIcon /> Choose Image
-                                </button>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Select a photo of your {logMode} to analyze it.</p>
-                            </div>
-                        )}
-                        
-                        {activeTab === 'voice' && (
-                            <div className="text-center">
-                                <button onClick={toggleListening} className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center transition-colors ${isListening ? 'bg-red-500 animate-pulse' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
-                                    <MicIcon />
-                                </button>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">{isListening ? "Listening..." : `Tap to describe your ${logMode}.`}</p>
-                                {speechError && <p className="text-sm text-red-500 mt-2">{speechError}</p>}
-                            </div>
-                        )}
-
-                        {activeTab === 'search' && (
-                            logMode === 'food' ? (
-                                <FoodSearch onAddFood={(foods) => { addFood(foods); setToastMessage('Food logged successfully!'); }} />
-                            ) : (
-                                <ExerciseSearch onAddExercise={(ex) => { addExercise(ex); setToastMessage('Exercise added!'); }} />
-                            )
-                        )}
-                    </>
-                )}
-
-                {error && <p className="text-sm text-red-500 text-center mt-2">{error}</p>}
-            </div>
+            {toastMessage && (
+                <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+            )}
         </div>
     );
 };

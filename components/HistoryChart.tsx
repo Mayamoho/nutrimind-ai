@@ -1,28 +1,62 @@
-
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { DailyLog } from '../types';
+import { getEffectiveDate } from '../utils/dateUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface HistoryChartProps {
     dailyLogs: DailyLog[];
 }
 
 const HistoryChart: React.FC<HistoryChartProps> = ({ dailyLogs }) => {
+    const { user } = useAuth();
+    
+    // Calculate BMR for total burn calculation
+    const calculateBMR = (): number => {
+        if (!user) return 1600;
+        const { weight = 70, height = 170, age = 30, gender = 'female' } = user;
+        const bmr = 10 * weight + 6.25 * height - 5 * age + (gender === 'male' ? 5 : -161);
+        return Math.round(bmr);
+    };
+
+    const bmr = calculateBMR();
+
     const processData = (logs: DailyLog[]) => {
-        // Get last 7 days including today
-        const sortedLogs = [...logs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // Deduplicate logs by date first
+        const uniqueLogsMap = new Map<string, DailyLog>();
+        logs.forEach(log => {
+            const dateKey = typeof log.date === 'string' ? log.date : new Date(log.date).toISOString().split('T')[0];
+            if (!uniqueLogsMap.has(dateKey)) {
+                uniqueLogsMap.set(dateKey, log);
+            }
+        });
+        
+        // Get effective today (using 6 AM boundary)
+        const effectiveToday = getEffectiveDate();
+        
+        // Get last 7 days including today (effective date)
+        const sortedLogs = Array.from(uniqueLogsMap.values())
+            .filter(log => log.date <= effectiveToday)
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const last7DaysLogs = sortedLogs.slice(-7);
 
         return last7DaysLogs.map(log => {
             const date = new Date(log.date);
-            // Adjust for timezone offset
             const userTimezoneOffset = date.getTimezoneOffset() * 60000;
             const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
 
+            const caloriesIn = (log.foods || []).reduce((sum, food) => sum + (food.calories || 0), 0);
+            const exerciseBurn = (log.exercises || []).reduce((sum, ex) => sum + (ex.caloriesBurned || 0), 0);
+            const neatBurn = (log.neatActivities || []).reduce((sum, a) => sum + (a.calories || 0), 0);
+            const tef = Math.round(caloriesIn * 0.1); // Thermic Effect of Food
+            
+            // Total burn = BMR + Exercise + NEAT + TEF
+            const totalBurn = bmr + exerciseBurn + neatBurn + tef;
+
             return {
                 name: adjustedDate.toLocaleDateString('en-US', { weekday: 'short' }),
-                Intake: log.foods.reduce((sum, food) => sum + food.calories, 0),
-                Burned: log.exercises.reduce((sum, ex) => sum + ex.caloriesBurned, 0),
+                Intake: caloriesIn,
+                Burned: totalBurn,
             };
         });
     };
@@ -44,6 +78,10 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ dailyLogs }) => {
                             borderRadius: '0.75rem'
                         }}
                         labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+                        formatter={(value: number, name: string) => [
+                            `${Math.round(value)} kcal`,
+                            name === 'Burned' ? 'Total Burn (BMR+EAT+NEAT+TEF)' : name
+                        ]}
                     />
                     <Legend wrapperStyle={{paddingTop: '20px'}}/>
                     <Bar dataKey="Intake" fill="#10b981" radius={[4, 4, 0, 0]} />

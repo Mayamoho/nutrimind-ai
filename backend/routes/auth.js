@@ -98,6 +98,16 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+// DB error helper (same behavior as other files)
+const handleDbError = (err, res) => {
+  if (!err) return false;
+  const code = err.code || '';
+  if (code === 'DB_UNAVAILABLE' || code === 'ECONNREFUSED') {
+    return res.status(503).json({ error: 'Database unavailable. Try again later.' });
+  }
+  return false;
+};
+
 const router = express.Router();
 
 // Helper to promisify jwt.sign for async/await usage
@@ -146,13 +156,27 @@ router.post('/register', async (req, res) => {
     // Create initial weight log entry
     await db.query('INSERT INTO weight_logs (user_email, date, weight) VALUES ($1, $2, $3)', [email, new Date().toISOString().split('T')[0], startWeight]);
 
-    const payload = { user: { email: newUser.email } };
+    // Create payload with complete user data
+    const payload = { user: newUser };
     const token = await signToken(payload, process.env.JWT_SECRET, { expiresIn: '5h' });
+
+    // Set cookie for convenience (HttpOnly). Frontend may also use Authorization header.
+    try {
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.COOKIE_SECURE === 'true',
+        sameSite: process.env.SESSION_SAMESITE || 'lax',
+        maxAge: 5 * 60 * 60 * 1000 // 5 hours
+      };
+      res.cookie('token', token, cookieOptions);
+    } catch (e) {
+      // ignore cookie set failures
+    }
 
     // The user object sent back is already camelCased by the RETURNING clause
     res.json({ token, user: newUser });
   } catch (err) {
-    console.error('Registration Error:', err);
+    console.error('Registration Error:', err.message);
     res.status(500).json({ msg: 'Server error during registration. Please check server logs.' });
   }
 });
@@ -175,14 +199,104 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ msg: 'Invalid Credentials' });
     }
 
-    const payload = { user: { email: user.email } };
+    // Create payload with complete user data (excluding sensitive info)
+    const { password_hash, ...userWithoutPassword } = user;
+    const payload = { 
+      user: userWithoutPassword 
+    };
     const token = await signToken(payload, process.env.JWT_SECRET, { expiresIn: '5h' });
 
-    const { password_hash, ...userResponse } = user;
-    res.json({ token, user: userResponse });
+    // Set HttpOnly cookie as well as returning token in JSON
+    try {
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.COOKIE_SECURE === 'true',
+        sameSite: process.env.SESSION_SAMESITE || 'lax',
+        maxAge: 5 * 60 * 60 * 1000 // 5 hours
+      };
+      res.cookie('token', token, cookieOptions);
+    } catch (e) {}
+
+    // Return the same user data that's in the token
+    res.json({ token, user: userWithoutPassword });
   } catch (err) {
-    console.error('Login Error:', err);
+    console.error('Login Error:', err.message);
     res.status(500).json({ msg: 'Server error during login. Please check server logs.' });
+  }
+});
+
+// @route   GET api/auth/me
+// @desc    Get current user from token
+router.get('/me', require('../middleware/auth'), async (req, res) => {
+  try {
+    // Extract email from user object
+    const email = req.user && (typeof req.user === 'object' ? req.user.email : req.user);
+    
+    if (!email) {
+      return res.status(400).json({ msg: 'User email not found in token' });
+    }
+    
+    const userQuery = await db.query('SELECT email, last_name AS "lastName", weight, start_weight AS "startWeight", height, age, gender, country FROM users WHERE email = $1', [email]);
+    if (userQuery.rows.length === 0) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+    res.json({ user: userQuery.rows[0] });
+  } catch (err) {
+    if (handleDbError(err, res)) return;
+    console.error('Get User Error:', err);
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
+// @route   PUT api/auth/profile
+// @desc    Update user profile
+router.put('/profile', require('../middleware/auth'), async (req, res) => {
+  try {
+    const { lastName, country, password } = req.body;
+    // Extract email from user object
+    const email = req.user && (typeof req.user === 'object' ? req.user.email : req.user);
+    
+    if (!email) {
+      return res.status(400).json({ msg: 'User email not found in token' });
+    }
+    
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+    
+    if (lastName !== undefined) {
+      updates.push(`last_name = $${paramIndex++}`);
+      values.push(lastName);
+    }
+    if (country !== undefined) {
+      updates.push(`country = $${paramIndex++}`);
+      values.push(country);
+    }
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
+      updates.push(`password_hash = $${paramIndex++}`);
+      values.push(passwordHash);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ msg: 'No fields to update' });
+    }
+    
+    values.push(email);
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE email = $${paramIndex} RETURNING email, last_name AS "lastName", weight, start_weight AS "startWeight", height, age, gender, country`;
+    
+    const result = await db.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+    
+    res.json({ user: result.rows[0], msg: 'Profile updated successfully' });
+  } catch (err) {
+    console.error('Update Profile Error:', err);
+    res.status(500).json({ msg: 'Server error updating profile' });
   }
 });
 

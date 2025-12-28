@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { DailyLog, MealType, FoodLog, ExerciseLog } from '../types';
 import { FireIcon } from './icons/FireIcon';
@@ -15,9 +13,140 @@ interface LogListProps {
     onDeleteExercise: (id: string) => void;
 }
 
+// --- FACTORY PATTERN: Products ---
+
+interface LogItemProps {
+    item: FoodLog | ExerciseLog;
+    isEditing: boolean;
+    editData: { name: string; calories: number } | null;
+    onEdit: (item: FoodLog | ExerciseLog) => void;
+    onDelete: (id: string) => void;
+    onSave: (id: string) => void;
+    onCancel: () => void;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const FoodLogItem: React.FC<LogItemProps> = ({ item, isEditing, editData, onEdit, onDelete, onSave, onCancel, onChange }) => {
+    const food = item as FoodLog;
+    console.log('FoodLogItem received:', food);
+    return (
+        <li className="flex justify-between items-center bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg min-h-[64px]">
+            {isEditing ? (
+                <>
+                    <span className="capitalize flex-1">{editData?.name}</span>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            name="calories"
+                            value={editData?.calories}
+                            onChange={onChange}
+                            className="bg-slate-200 dark:bg-slate-600 text-slate-900 dark:text-white rounded px-2 py-1 text-sm w-20 text-right"
+                            aria-label="Edit item calories"
+                            autoFocus
+                        />
+                        <span className="text-sm">kcal</span>
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                        <button onClick={() => onSave(food.id)} className="text-emerald-500 hover:text-emerald-700 text-sm font-semibold">Save</button>
+                        <button onClick={onCancel} className="text-slate-500 hover:text-slate-700 text-sm">Cancel</button>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <div>
+                        <span className="capitalize font-semibold text-slate-800 dark:text-slate-200">{food.name}</span>
+                        {food.nutrients?.macros && food.nutrients.macros.length > 0 && (
+                            <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                <span>
+                                    <span className="font-medium text-sky-500">P:</span> {food.nutrients.macros.find(m => m.name === 'Protein')?.amount || 0}g
+                                </span>
+                                <span>
+                                    <span className="font-medium text-orange-500">C:</span> {food.nutrients.macros.find(m => m.name === 'Carbs')?.amount || 0}g
+                                </span>
+                                <span>
+                                    <span className="font-medium text-violet-500">F:</span> {food.nutrients.macros.find(m => m.name === 'Fat')?.amount || 0}g
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{food.calories} kcal</span>
+                        <button onClick={() => onEdit(food)} className="text-slate-400 hover:text-sky-500" aria-label={`Edit ${food.name}`}>
+                            <EditIcon />
+                        </button>
+                        <button onClick={() => onDelete(food.id)} className="text-slate-400 hover:text-red-500" aria-label={`Delete ${food.name}`}>
+                            <TrashIcon />
+                        </button>
+                    </div>
+                </>
+            )}
+        </li>
+    );
+};
+
+const ExerciseLogItem: React.FC<LogItemProps> = ({ item, isEditing, editData, onEdit, onDelete, onSave, onCancel, onChange }) => {
+    const exercise = item as ExerciseLog;
+    return (
+        <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg min-h-[50px]">
+            {isEditing ? (
+                <>
+                    <span className="capitalize flex-1">{editData?.name}</span>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            name="calories"
+                            value={editData?.calories}
+                            onChange={onChange}
+                            className="bg-slate-200 dark:bg-slate-600 text-slate-900 dark:text-white rounded px-2 py-1 text-sm w-20 text-right"
+                            aria-label="Edit calories burned"
+                            autoFocus
+                        />
+                        <span className="text-sm">kcal</span>
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                        <button onClick={() => onSave(exercise.id)} className="text-emerald-500 hover:text-emerald-700 text-sm font-semibold">Save</button>
+                        <button onClick={onCancel} className="text-slate-500 hover:text-slate-700 text-sm">Cancel</button>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <div className="flex-1">
+                        <span className="capitalize">{exercise.name}</span>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{exercise.duration} min</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{exercise.caloriesBurned} kcal</span>
+                        <button onClick={() => onEdit(exercise)} className="text-slate-400 hover:text-sky-500" aria-label={`Edit ${exercise.name}`}>
+                            <EditIcon />
+                        </button>
+                        <button onClick={() => onDelete(exercise.id)} className="text-slate-400 hover:text-red-500" aria-label={`Delete ${exercise.name}`}>
+                            <TrashIcon />
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+// --- FACTORY PATTERN: Creator ---
+
+const LogItemFactory: React.FC<{ type: 'food' | 'exercise' } & LogItemProps> = (props) => {
+    switch (props.type) {
+        case 'food':
+            return <FoodLogItem {...props} />;
+        case 'exercise':
+            return <ExerciseLogItem {...props} />;
+        default:
+            return null;
+    }
+};
+
+// --- Main Component ---
+
 const LogList: React.FC<LogListProps> = ({ todayLog, onUpdateFood, onDeleteFood, onUpdateExercise, onDeleteExercise }) => {
     const { foods, exercises } = todayLog;
-
     const [editingItem, setEditingItem] = useState<{ id: string; name: string; calories: number; } | null>(null);
 
     const handleEdit = (item: FoodLog | ExerciseLog) => {
@@ -28,9 +157,7 @@ const LogList: React.FC<LogListProps> = ({ todayLog, onUpdateFood, onDeleteFood,
         });
     };
 
-    const handleCancel = () => {
-        setEditingItem(null);
-    };
+    const handleCancel = () => setEditingItem(null);
 
     const handleCaloriesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!editingItem) return;
@@ -52,129 +179,65 @@ const LogList: React.FC<LogListProps> = ({ todayLog, onUpdateFood, onDeleteFood,
         setEditingItem(null);
     };
 
-
-    const foodSections = {
-        [MealType.Breakfast]: foods.filter(f => f.mealType === MealType.Breakfast),
-        [MealType.Lunch]: foods.filter(f => f.mealType === MealType.Lunch),
-        [MealType.Dinner]: foods.filter(f => f.mealType === MealType.Dinner),
-        [MealType.Snacks]: foods.filter(f => f.mealType === MealType.Snacks),
+    const commonProps = {
+        isEditing: false, // overridden below
+        editData: editingItem,
+        onEdit: handleEdit,
+        onCancel: handleCancel,
+        onChange: handleCaloriesChange,
     };
 
     return (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-lg">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FoodIcon /> Today's Food Log</h2>
-            <div className="space-y-4 mb-6">
-                {Object.entries(foodSections).map(([meal, items]) => {
-                    if (items.length === 0) return null;
-                    return (
-                        <div key={meal}>
-                            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">{meal as MealType}</h3>
-                            <ul className="space-y-2">
-                                {items.map(item => (
-                                    <li key={item.id} className="flex justify-between items-center bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg min-h-[64px]">
-                                        {editingItem?.id === item.id ? (
-                                            <>
-                                                <span className="capitalize flex-1">{editingItem.name}</span>
-                                                <div className="flex items-center gap-2">
-                                                   <input
-                                                        type="number"
-                                                        name="calories"
-                                                        value={editingItem.calories}
-                                                        onChange={handleCaloriesChange}
-                                                        className="bg-slate-200 dark:bg-slate-600 text-slate-900 dark:text-white rounded px-2 py-1 text-sm w-20 text-right"
-                                                        aria-label="Edit item calories"
-                                                        autoFocus
-                                                    />
-                                                    <span className="text-sm">kcal</span>
-                                                </div>
-                                                <div className="flex gap-2 ml-4">
-                                                    <button onClick={() => handleSaveFood(item.id)} className="text-emerald-500 hover:text-emerald-700 text-sm font-semibold">Save</button>
-                                                    <button onClick={handleCancel} className="text-slate-500 hover:text-slate-700 text-sm">Cancel</button>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div>
-                                                    <span className="capitalize font-semibold text-slate-800 dark:text-slate-200">{item.name}</span>
-                                                    {item.nutrients?.macros && item.nutrients.macros.length > 0 && (
-                                                        <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                            <span>
-                                                                <span className="font-medium text-sky-500">P:</span> {item.nutrients.macros.find(m => m.name === 'Protein')?.amount || 0}g
-                                                            </span>
-                                                            <span>
-                                                                <span className="font-medium text-orange-500">C:</span> {item.nutrients.macros.find(m => m.name === 'Carbs')?.amount || 0}g
-                                                            </span>
-                                                            <span>
-                                                                <span className="font-medium text-violet-500">F:</span> {item.nutrients.macros.find(m => m.name === 'Fat')?.amount || 0}g
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium text-slate-800 dark:text-slate-200">{item.calories} kcal</span>
-                                                    <button onClick={() => handleEdit(item)} className="text-slate-400 hover:text-sky-500" aria-label={`Edit ${item.name}`}>
-                                                        <EditIcon />
-                                                    </button>
-                                                    <button onClick={() => onDeleteFood(item.id)} className="text-slate-400 hover:text-red-500" aria-label={`Delete ${item.name}`}>
-                                                        <TrashIcon />
-                                                    </button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
+            
+            {/* Group foods by meal type */}
+            {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as MealType[]).map(mealType => {
+                const mealFoods = foods.filter(food => food.mealType === mealType);
+                if (mealFoods.length === 0) return null;
+                
+                return (
+                    <div key={mealType} className="mb-6">
+                        <h3 className="text-lg font-semibold mb-3 text-slate-700 dark:text-slate-300">
+                            {mealType}
+                        </h3>
+                        <div className="space-y-2">
+                            {mealFoods.map((item, index) => (
+                                <LogItemFactory
+                                    key={`food-${item.name || 'unknown'}-${mealType}-${index}`}
+                                    type="food"
+                                    item={item}
+                                    {...commonProps}
+                                    isEditing={editingItem?.id === item.id}
+                                    onDelete={onDeleteFood}
+                                    onSave={handleSaveFood}
+                                />
+                            ))}
                         </div>
-                    );
-                })}
-                {foods.length === 0 && <p className="text-slate-500 dark:text-slate-400">No food logged yet for today.</p>}
-            </div>
-
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FireIcon /> Today's Exercise Log</h2>
-            <div className="space-y-2">
-                {exercises.map(ex => (
-                    <div key={ex.id} className="flex justify-between items-center bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg min-h-[50px]">
-                         {editingItem?.id === ex.id ? (
-                            <>
-                                <span className="capitalize flex-1">{editingItem.name}</span>
-                                <div className="flex items-center gap-2">
-                                   <input
-                                        type="number"
-                                        name="calories"
-                                        value={editingItem.calories}
-                                        onChange={handleCaloriesChange}
-                                        className="bg-slate-200 dark:bg-slate-600 text-slate-900 dark:text-white rounded px-2 py-1 text-sm w-20 text-right"
-                                        aria-label="Edit calories burned"
-                                        autoFocus
-                                    />
-                                    <span className="text-sm">kcal</span>
-                                </div>
-                                <div className="flex gap-2 ml-4">
-                                    <button onClick={() => handleSaveExercise(ex.id)} className="text-emerald-500 hover:text-emerald-700 text-sm font-semibold">Save</button>
-                                    <button onClick={handleCancel} className="text-slate-500 hover:text-slate-700 text-sm">Cancel</button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="flex-1">
-                                    <span className="capitalize">{ex.name}</span>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{ex.duration} min</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-medium text-slate-800 dark:text-slate-200">{ex.caloriesBurned} kcal</span>
-                                    <button onClick={() => handleEdit(ex)} className="text-slate-400 hover:text-sky-500" aria-label={`Edit ${ex.name}`}>
-                                        <EditIcon />
-                                    </button>
-                                    <button onClick={() => onDeleteExercise(ex.id)} className="text-slate-400 hover:text-red-500" aria-label={`Delete ${ex.name}`}>
-                                        <TrashIcon />
-                                    </button>
-                                </div>
-                            </>
-                        )}
                     </div>
+                );
+            })}
+            
+            {foods.length === 0 && (
+                <p className="text-slate-500 dark:text-slate-400 text-center py-4">No foods logged today</p>
+            )}
+
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><FireIcon /> Today's Exercise</h3>
+            <div className="space-y-2">
+                {exercises.map((exercise, index) => (
+                    <LogItemFactory
+                        key={`exercise-${exercise.name || 'unknown'}-${index}`}
+                        type="exercise"
+                        item={exercise}
+                        {...commonProps}
+                        isEditing={editingItem?.id === exercise.id}
+                        onDelete={onDeleteExercise}
+                        onSave={handleSaveExercise}
+                    />
                 ))}
-                {exercises.length === 0 && <p className="text-slate-500 dark:text-slate-400">No exercise logged yet for today.</p>}
+                {exercises.length === 0 && (
+                    <p className="text-slate-500 dark:text-slate-400 text-center py-4">No exercises logged today</p>
+                )}
             </div>
         </div>
     );

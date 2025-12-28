@@ -26,17 +26,33 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = function authMiddleware(req, res, next) {
-	const token = (req.cookies && req.cookies.token) || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
-	if (!token) {
-		req.user = null;
-		return next();
-	}
-	try {
-		const decoded = jwt.verify(token, process.env.JWT_SECRET);
-		req.user = { id: decoded.id };
-		return next();
-	} catch (err) {
-		req.user = null;
-		return next();
-	}
+    const token = (req.cookies && req.cookies.token) || 
+                 (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+
+    if (!token) {
+        return res.status(401).json({ msg: 'No token, authorization denied' });
+    }
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        // Set the full user object from the token
+        if (!decoded.user) {
+            throw new Error('Invalid token format: user data missing');
+        }
+        req.user = decoded.user;  // This should be the full user object
+        return next();
+    } catch (err) {
+        if (err && err.name === 'TokenExpiredError') {
+            console.info('[auth] JWT expired for token preview:', String(token).slice(0, 24));
+            return res.status(401).json({ 
+                msg: 'Token expired', 
+                code: 'TOKEN_EXPIRED' 
+            });
+        }
+        console.warn('[auth] JWT verification failed:', err && (err.name || err.message));
+        return res.status(401).json({ 
+            msg: 'Token is not valid',
+            error: err.message 
+        });
+    }
 };

@@ -1,0 +1,9 @@
+export { default as DashboardTab } from './DashboardTab';
+export { default as LogTab } from './LogTab';
+export { default as ProgressTab } from './ProgressTab';
+export { default as AchievementsTab } from './AchievementsTab';
+export { default as LeaderboardTab } from './LeaderboardTab';
+export { default as ProfileTab } from './ProfileTab';
+export { default as DataAnalysisTab } from './DataAnalysisTab';
+export { default as SocialTab } from './SocialTab';
+export { default as VideoCallTab } from './VideoCallTab';

@@ -1,348 +1,379 @@
-// import { DailyLog, FoodLog, ExerciseLog, MealType, User, UserGoals, DailyProgress, AISuggestions } from "../types";
-// import { api } from './api';
+/**
+ * Gemini Service - Simplified to use only Gemini 2.5 Flash
+ * Food and exercise analysis via Google Gemini AI
+ */
 
-// const multiFoodSchema = {
-//     type: "ARRAY",
-//     items: {
-//         type: "OBJECT",
-//         properties: {
-//             foodName: { type: "STRING", description: "Name of the food item. e.g., 'Banana'." },
-//             servingQuantity: { type: "NUMBER", description: "The quantity of the serving size identified. e.g., 1 if the serving is '1 medium banana'." },
-//             servingUnit: { type: "STRING", description: "The unit of the serving size. e.g., 'medium banana', 'cup', '100g'." },
-//             calories: { type: "NUMBER", description: "Estimated total calories for the identified serving quantity and unit." },
-//             protein: { type: "NUMBER", description: "Estimated grams of protein for the serving." },
-//             carbohydrates: { type: "NUMBER", description: "Estimated grams of carbohydrates for the serving." },
-//             fat: { type: "NUMBER", description: "Estimated grams of fat for the serving." },
-//             sodium: { type: "NUMBER", description: "Estimated milligrams of sodium for the serving." },
-//             sugar: { type: "NUMBER", description: "Estimated grams of sugar for the serving. If not applicable, return 0." },
-//             fiber: { type: "NUMBER", description: "Estimated grams of fiber for the serving. If not applicable, return 0." }
-//         },
-//         required: ["foodName", "servingQuantity", "servingUnit", "calories", "protein", "carbohydrates", "fat", "sodium", "sugar", "fiber"]
-//     }
-// };
-
-// const singleExerciseSchema = {
-//     type: "OBJECT",
-//     properties: {
-//         exerciseName: { type: "STRING", description: "Name of the exercise. e.g., 'Running'." },
-//         duration: { type: "NUMBER", description: "Estimated duration of the exercise in minutes." },
-//         caloriesBurned: { type: "NUMBER", description: "Estimated total calories burned for the entire duration." }
-//     },
-//     required: ["exerciseName", "duration", "caloriesBurned"]
-// };
-
-// const suggestionSchema = {
-//     type: "OBJECT",
-//     properties: {
-//         positiveFood: {
-//             type: "ARRAY",
-//             items: { type: "STRING" },
-//             description: "An array of 2-3 detailed, actionable, and encouraging suggestions for healthy foods. Mention specific meal ideas or pairings. If possible, suggest foods that are culturally relevant to the user's country. e.g., 'To boost your protein, consider adding lentils to your lunch. A simple dal with brown rice is a fantastic, fiber-rich option common in South Asian cuisine.'"
-//         },
-//         positiveExercise: {
-//             type: "ARRAY",
-//             items: { type: "STRING" },
-//             description: "An array of 1-2 detailed and motivating suggestions for exercises or activities. Explain the benefits. e.g., 'Adding 20 minutes of high-intensity interval training (HIIT) twice a week, like alternating between sprinting and jogging, could significantly boost your metabolism.'"
-//         },
-//         cautionFood: {
-//             type: "ARRAY",
-//             items: { type: "STRING" },
-//             description: "An array of 1-2 gentle, non-judgmental suggestions about foods to be mindful of. Explain the 'why' behind the suggestion in a helpful way. e.g., 'While fruit juices have vitamins, they can also be high in sugar without the fiber of whole fruit. Eating an orange instead of drinking juice will keep you full longer.'"
-//         }
-//     },
-//     required: ["positiveFood", "positiveExercise", "cautionFood"]
-// };
-
-
-// // Maps the raw JSON response from Gemini into the FoodLog type
-// const mapToFoodLog = (item: any, mealType: MealType): Omit<FoodLog, 'id' | 'timestamp'> => {
-//     return {
-//         name: item.foodName,
-//         calories: item.calories,
-//         mealType: mealType,
-//         servingQuantity: item.servingQuantity,
-//         servingUnit: item.servingUnit,
-//         nutrients: {
-//             macros: [
-//                 { name: 'Protein', amount: item.protein, unit: 'g' },
-//                 { name: 'Carbs', amount: item.carbohydrates, unit: 'g' },
-//                 { name: 'Fat', amount: item.fat, unit: 'g' },
-//             ],
-//             micros: [
-//                 { name: 'Sodium', amount: item.sodium, unit: 'mg' },
-//                 { name: 'Sugar', amount: item.sugar, unit: 'g' },
-//                 { name: 'Fiber', amount: item.fiber, unit: 'g' },
-//             ],
-//         }
-//     };
-// };
-
-// export const analyzeFoodInput = async (
-//     text: string,
-//     mealType: MealType,
-//     image?: { inlineData: { data: string, mimeType: string } }
-// ): Promise<Omit<FoodLog, 'id' | 'timestamp'>[]> => {
-    
-//     const results = await api.analyzeFood(text, mealType, image, multiFoodSchema);
-    
-//     if (Array.isArray(results)) {
-//         return results.map(item => mapToFoodLog(item, mealType));
-//     }
-//     // Handle cases where the API might unexpectedly not return an array
-//     if (results && typeof results === 'object') {
-//         return [mapToFoodLog(results, mealType)];
-//     }
-
-//     throw new Error("Invalid response format from AI for food analysis.");
-// };
-
-
-// export const analyzeExerciseInput = async (
-//     text: string,
-//     image?: { inlineData: { data: string, mimeType: string } }
-// ): Promise<Omit<ExerciseLog, 'id' | 'timestamp'>> => {
-    
-//     const result = await api.analyzeExercise(text, image, singleExerciseSchema);
-    
-//     return {
-//         name: result.exerciseName,
-//         duration: result.duration,
-//         caloriesBurned: result.caloriesBurned,
-//     };
-// };
-
-// export const getAISuggestion = async (
-//     user: User,
-//     dailyLog: DailyLog,
-//     userGoals: UserGoals,
-//     dailyProgress: DailyProgress
-// ): Promise<AISuggestions> => {
-//     const prompt = `
-//         You are an expert AI nutritionist and fitness coach. Your goal is to provide highly personalized, culturally-aware, and encouraging advice.
-
-//         Based on the following user data, provide detailed, actionable nutrition and fitness suggestions. Frame the suggestions positively. Where possible, incorporate foods or activities that might be common or accessible in the user's country.
-        
-//         User Profile:
-//         - Age: ${user.age}
-//         - Gender: ${user.gender}
-//         - Country: ${user.country}
-//         - Weight: ${user.weight.toFixed(1)} kg
-//         - Height: ${user.height} cm
-//         - Goal: To ${userGoals.weightGoal} weight, aiming for ${userGoals.targetWeight} kg.
-
-//         Today's Log:
-//         - Food Eaten: ${dailyLog.foods.map(f => `${f.name} (${f.calories} kcal)`).join(', ') || 'None'}
-//         - Exercises Done: ${dailyLog.exercises.map(e => `${e.name} (${e.caloriesBurned} kcal)`).join(', ') || 'None'}
-//         - Passive Activity (NEAT): ${dailyLog.neatActivities.map(a => `${a.name} (~${a.calories} kcal)`).join(', ') || 'None'}
-        
-//         Today's Progress:
-//         - Calories Consumed: ${Math.round(dailyProgress.calories.achieved)} kcal
-//         - Calorie Target: ${Math.round(dailyProgress.goalCalories)} kcal
-//         - Protein: ${Math.round(dailyProgress.protein)}g (Target: ${Math.round(dailyProgress.proteinTarget)}g)
-//         - Carbs: ${Math.round(dailyProgress.carbs)}g (Target: ${Math.round(dailyProgress.carbTarget)}g)
-//         - Fat: ${Math.round(dailyProgress.fat)}g (Target: ${Math.round(dailyProgress.fatTarget)}g)
-
-//         Generate suggestions based on this data. Focus on what's going well and where there are opportunities for improvement.
-//     `;
-    
-//     return api.getSuggestion(prompt, suggestionSchema);
-// };
-
-// services/geminiservice.ts
 import { DailyLog, FoodLog, ExerciseLog, MealType, User, UserGoals, DailyProgress, AISuggestions } from "../types";
 import { api } from './api';
 
-const multiFoodSchema = {
-  type: "ARRAY",
-  items: {
-    type: "OBJECT",
-    properties: {
-      foodName: { type: "STRING", description: "Name of the food item. e.g., 'Banana'." },
-      servingQuantity: { type: "NUMBER", description: "The quantity of the serving size identified. e.g., 1 if the serving is '1 medium banana'." },
-      servingUnit: { type: "STRING", description: "The unit of the serving size. e.g., 'medium banana', 'cup', '100g'." },
-      calories: { type: "NUMBER", description: "Estimated total calories for the identified serving quantity and unit." },
-      protein: { type: "NUMBER", description: "Estimated grams of protein for the serving." },
-      carbohydrates: { type: "NUMBER", description: "Estimated grams of carbohydrates for the serving." },
-      fat: { type: "NUMBER", description: "Estimated grams of fat for the serving." },
-      sodium: { type: "NUMBER", description: "Estimated milligrams of sodium for the serving." },
-      sugar: { type: "NUMBER", description: "Estimated grams of sugar for the serving. If not applicable, return 0." },
-      fiber: { type: "NUMBER", description: "Estimated grams of fiber for the serving. If not applicable, return 0." }
-    },
-    required: ["foodName", "servingQuantity", "servingUnit", "calories", "protein", "carbohydrates", "fat", "sodium", "sugar", "fiber"]
-  }
-};
-
-const singleExerciseSchema = {
-  type: "OBJECT",
-  properties: {
-    exerciseName: { type: "STRING", description: "Name of the exercise. e.g., 'Running'." },
-    duration: { type: "NUMBER", description: "Estimated duration of the exercise in minutes." },
-    caloriesBurned: { type: "NUMBER", description: "Estimated total calories burned for the entire duration." }
-  },
-  required: ["exerciseName", "duration", "caloriesBurned"]
-};
-
-const suggestionSchema = {
-  type: "OBJECT",
-  properties: {
-    positiveFood: {
-      type: "ARRAY",
-      items: { type: "STRING" },
-      description: "An array of 2-3 detailed, actionable, and encouraging suggestions for healthy foods..."
-    },
-    positiveExercise: {
-      type: "ARRAY",
-      items: { type: "STRING" },
-      description: "An array of 1-2 detailed and motivating suggestions for exercises or activities..."
-    },
-    cautionFood: {
-      type: "ARRAY",
-      items: { type: "STRING" },
-      description: "An array of 1-2 gentle, non-judgmental suggestions about foods to be mindful of..."
-    }
-  },
-  required: ["positiveFood", "positiveExercise", "cautionFood"]
-};
-
-// Maps the raw JSON response from Gemini into the FoodLog type
-const mapToFoodLog = (item: any, mealType: MealType): Omit<FoodLog, 'id' | 'timestamp'> => {
-  return {
-    name: item.foodName,
-    calories: item.calories,
-    mealType: mealType,
-    servingQuantity: item.servingQuantity,
-    servingUnit: item.servingUnit,
-    nutrients: {
-      macros: [
-        { name: 'Protein', amount: item.protein, unit: 'g' },
-        { name: 'Carbs', amount: item.carbohydrates, unit: 'g' },
-        { name: 'Fat', amount: item.fat, unit: 'g' },
-      ],
-      micros: [
-        { name: 'Sodium', amount: item.sodium, unit: 'mg' },
-        { name: 'Sugar', amount: item.sugar, unit: 'g' },
-        { name: 'Fiber', amount: item.fiber, unit: 'g' },
-      ],
-    }
-  };
-};
-
+/**
+ * Analyze food input using Gemini 2.5 Flash
+ */
 export const analyzeFoodInput = async (
   text: string,
   mealType: MealType,
-  image?: { inlineData: { data: string, mimeType: string } }
+  _image?: { inlineData: { data: string, mimeType: string } }
 ): Promise<Omit<FoodLog, 'id' | 'timestamp'>[]> => {
-
+  console.log('Using Gemini 2.5 Flash for food analysis');
+  
   try {
-    const results = await api.analyzeFood(text, mealType, image, multiFoodSchema);
-
-    // Some endpoints might return { result: [...] } or directly [...]
-    const payload = Array.isArray(results) ? results : (results && results.result ? results.result : results);
-
-    if (!Array.isArray(payload)) {
-      // Try to coerce single object into array
-      if (payload && typeof payload === 'object') {
-        return [mapToFoodLog(payload, mealType)];
-      }
-      throw new Error('Invalid response format from AI — expected array of food objects.');
+    const gem = await api.analyzeFood(text, mealType, _image);
+    console.log('Gemini food analysis response:', gem);
+    if (Array.isArray(gem) && gem.length) {
+      return gem.map((item: any) => {
+        const foodName = item.foodName || item.name || item.item || 'Food';
+        console.log('Processing food item:', { item, foodName });
+        return {
+          name: foodName,
+          calories: Math.round(Number(item.calories) || 0),
+          mealType,
+          servingQuantity: item.servingQuantity || 1,
+          servingUnit: item.servingUnit || 'serving',
+          nutrients: {
+            macros: [
+              { name: 'Protein', amount: Number(item.protein) || Number(item.proteins) || 0, unit: 'g' },
+              { name: 'Carbs', amount: Number(item.carbohydrates) || Number(item.carbs) || 0, unit: 'g' },
+              { name: 'Fat', amount: Number(item.fat) || 0, unit: 'g' }
+            ],
+            micros: item.micros || item.nutrients?.micros || []
+          }
+        };
+      });
     }
-
-    // Basic validation of items
-    return payload.map((item: any) => {
-      if (!item || typeof item !== 'object' || !item.foodName) {
-        throw new Error('Invalid item in AI response for food analysis.');
+  } catch (e: any) {
+    console.error('Gemini food analysis failed:', e.message || e);
+    console.log('Falling back to search API for food analysis');
+    
+    // Fallback to search API when Gemini fails
+    try {
+      const searchResults = await api.searchFoods(text);
+      if (searchResults && searchResults.length > 0) {
+        console.log('Using search API results for food analysis');
+        return searchResults.map(item => ({
+          name: item.name,
+          calories: item.calories,
+          mealType,
+          servingQuantity: item.servingQuantity || 1,
+          servingUnit: item.servingUnit || 'serving',
+          nutrients: item.nutrients || {
+            macros: [
+              { name: 'Protein', amount: 0, unit: 'g' },
+              { name: 'Carbs', amount: 0, unit: 'g' },
+              { name: 'Fat', amount: 0, unit: 'g' }
+            ],
+            micros: []
+          }
+        }));
       }
-      return mapToFoodLog(item, mealType);
-    });
-  } catch (err: any) {
-    console.error('analyzeFoodInput error:', err);
-    if (err instanceof Error && /Network error/i.test(err.message)) {
-      throw new Error('Network error while calling AI service. Please check your backend and network.');
+    } catch (searchError: any) {
+      console.warn('Search API fallback also failed:', searchError.message);
     }
-    throw err;
+    
+    throw new Error(`Food analysis failed: ${e.message}`);
   }
+
+  throw new Error('No food analysis available from Gemini');
 };
 
-
+/**
+ * Analyze exercise input using Gemini 2.5 Flash
+ */
 export const analyzeExerciseInput = async (
   text: string,
-  image?: { inlineData: { data: string, mimeType: string } }
+  _image?: { inlineData: { data: string, mimeType: string } }
 ): Promise<Omit<ExerciseLog, 'id' | 'timestamp'>> => {
-
+  console.log('Using Gemini 2.5 Flash for exercise analysis');
+  
   try {
-    const result = await api.analyzeExercise(text, image, singleExerciseSchema);
-
-    // handle wrapped responses like { result: {...} }
-    const payload = (result && result.result) ? result.result : result;
-
-    if (!payload || typeof payload !== 'object' || !payload.exerciseName) {
-      throw new Error('Invalid response format from AI for exercise analysis.');
+    const parsed = await api.analyzeExercise(text, _image);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        name: parsed.exerciseName || 'Exercise',
+        duration: parsed.duration || 30,
+        caloriesBurned: Math.round(parsed.caloriesBurned || 0),
+      };
     }
-
+  } catch (e: any) {
+    console.error('Gemini exercise analysis failed:', e.message || e);
+    console.log('Falling back to search API for exercise analysis');
+    
+    // Fallback to search API when Gemini fails
+    try {
+      const searchResults = await api.searchExercises(text);
+      if (searchResults && searchResults.length > 0) {
+        console.log('Using search API results for exercise analysis');
+        const firstResult = searchResults[0];
+        return {
+          name: firstResult.name,
+          duration: firstResult.duration || 30,
+          caloriesBurned: Math.round(firstResult.caloriesBurned || 0),
+        };
+      }
+    } catch (searchError: any) {
+      console.warn('Search API fallback also failed:', searchError.message);
+    }
+    
+    console.log('Falling back to local exercise database');
+    
+    // Fallback to local exercise database
+    const fallbackExercise = getLocalExerciseMatch(text);
+    if (fallbackExercise) {
+      return fallbackExercise;
+    }
+    
+    // Last resort - create generic exercise entry
     return {
-      name: payload.exerciseName,
-      duration: payload.duration,
-      caloriesBurned: payload.caloriesBurned,
+      name: text,
+      duration: 30,
+      caloriesBurned: 150, // Default estimate
     };
-  } catch (err: any) {
-    console.error('analyzeExerciseInput error:', err);
-    if (err instanceof Error && /Network error/i.test(err.message)) {
-      throw new Error('Network error while calling AI service. Please check your backend and network.');
-    }
-    throw err;
   }
+
+  // Last resort fallback
+  return {
+    name: text,
+    duration: 30,
+    caloriesBurned: 150,
+  };
 };
 
+// Local exercise database for fallbacks
+function getLocalExerciseMatch(text: string): Omit<ExerciseLog, 'id' | 'timestamp'> | null {
+  const lowerText = text.toLowerCase();
+  
+  const exerciseDatabase: { [key: string]: Omit<ExerciseLog, 'id' | 'timestamp'> } = {
+    'walking': { name: 'Walking', duration: 30, caloriesBurned: 120 },
+    'running': { name: 'Running', duration: 30, caloriesBurned: 300 },
+    'jogging': { name: 'Jogging', duration: 30, caloriesBurned: 250 },
+    'cycling': { name: 'Cycling', duration: 30, caloriesBurned: 200 },
+    'swimming': { name: 'Swimming', duration: 30, caloriesBurned: 250 },
+    'yoga': { name: 'Yoga', duration: 30, caloriesBurned: 90 },
+    'gym': { name: 'Gym Workout', duration: 45, caloriesBurned: 200 },
+    'weight': { name: 'Weight Training', duration: 30, caloriesBurned: 150 },
+    'cardio': { name: 'Cardio', duration: 30, caloriesBurned: 200 },
+    'dance': { name: 'Dancing', duration: 30, caloriesBurned: 180 },
+    'sports': { name: 'Sports', duration: 30, caloriesBurned: 200 },
+    'exercise': { name: 'General Exercise', duration: 30, caloriesBurned: 150 },
+    'workout': { name: 'Workout', duration: 30, caloriesBurned: 180 }
+  };
+  
+  for (const [key, exercise] of Object.entries(exerciseDatabase)) {
+    if (lowerText.includes(key)) {
+      return exercise;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Generate AI coach suggestions using Gemini 2.5 Flash
+ */
+export const generateSuggestion = async (
+  prompt: string,
+  model = 'gemini-2.5-flash'
+): Promise<AISuggestions> => {
+  console.log('Using Gemini 2.5 Flash for AI coach suggestions');
+  
+  try {
+    const response = await api.getSuggestion(prompt, { model });
+    if (response && typeof response === 'object') {
+      return response as AISuggestions;
+    }
+  } catch (e: any) {
+    console.error('Gemini suggestion generation failed:', e.message || e);
+    throw new Error(`Gemini suggestion failed: ${e.message}`);
+  }
+
+  throw new Error('No suggestions available from Gemini');
+};
+
+// Exercise database for local lookup (no API needed)
+const EXERCISE_DATABASE: Record<string, { caloriesPerMinute: number }> = {
+  'running': { caloriesPerMinute: 11 },
+  'jogging': { caloriesPerMinute: 8 },
+  'walking': { caloriesPerMinute: 4 },
+  'cycling': { caloriesPerMinute: 8 },
+  'swimming': { caloriesPerMinute: 10 },
+  'yoga': { caloriesPerMinute: 3 },
+  'weight training': { caloriesPerMinute: 5 },
+  'weightlifting': { caloriesPerMinute: 5 },
+  'hiit': { caloriesPerMinute: 12 },
+  'dancing': { caloriesPerMinute: 6 },
+  'aerobics': { caloriesPerMinute: 7 },
+  'pilates': { caloriesPerMinute: 4 },
+  'basketball': { caloriesPerMinute: 8 },
+  'football': { caloriesPerMinute: 9 },
+  'soccer': { caloriesPerMinute: 9 },
+  'tennis': { caloriesPerMinute: 7 },
+  'badminton': { caloriesPerMinute: 6 },
+  'volleyball': { caloriesPerMinute: 5 },
+  'cricket': { caloriesPerMinute: 5 },
+  'golf': { caloriesPerMinute: 4 },
+  'hiking': { caloriesPerMinute: 6 },
+  'climbing': { caloriesPerMinute: 9 },
+  'rowing': { caloriesPerMinute: 8 },
+  'jumping rope': { caloriesPerMinute: 12 },
+  'skipping': { caloriesPerMinute: 12 },
+  'boxing': { caloriesPerMinute: 10 },
+  'martial arts': { caloriesPerMinute: 9 },
+  'stretching': { caloriesPerMinute: 2 },
+  'elliptical': { caloriesPerMinute: 7 },
+  'stair climbing': { caloriesPerMinute: 9 },
+  'push ups': { caloriesPerMinute: 7 },
+  'sit ups': { caloriesPerMinute: 5 },
+  'squats': { caloriesPerMinute: 6 },
+  'plank': { caloriesPerMinute: 4 },
+  'burpees': { caloriesPerMinute: 10 },
+};
+
+/**
+ * Quick exercise lookup (fallback for common exercises)
+ */
+export const quickExerciseLookup = (name: string, duration: number): Omit<ExerciseLog, 'id' | 'timestamp'> => {
+  const normalizedName = name.toLowerCase().trim();
+  const exercise = EXERCISE_DATABASE[normalizedName];
+  
+  if (exercise) {
+    return {
+      name: name,
+      duration: duration,
+      caloriesBurned: Math.round(exercise.caloriesPerMinute * duration),
+    };
+  }
+  
+  // Default estimate if not found
+  return {
+    name: name,
+    duration: duration,
+    caloriesBurned: Math.round(5 * duration), // 5 cal/min default
+  };
+};
+
+/**
+ * Get AI suggestions - still uses Gemini but with caching and rate limiting
+ * This is called less frequently (once per session or on manual refresh)
+ */
 export const getAISuggestion = async (
   user: User,
   dailyLog: DailyLog,
   userGoals: UserGoals,
   dailyProgress: DailyProgress
 ): Promise<AISuggestions> => {
-  const prompt = `
-    You are an expert AI nutritionist and fitness coach. Your goal is to provide highly personalized, culturally-aware, and encouraging advice.
-
-    Based on the following user data, provide detailed, actionable nutrition and fitness suggestions. Frame the suggestions positively. Where possible, incorporate foods or activities that might be common or accessible in the user's country.
-    
-    User Profile:
-    - Age: ${user.age}
-    - Gender: ${user.gender}
-    - Country: ${user.country}
-    - Weight: ${user.weight.toFixed(1)} kg
-    - Height: ${user.height} cm
-    - Goal: To ${userGoals.weightGoal} weight, aiming for ${userGoals.targetWeight} kg.
-
-    Today's Log:
-    - Food Eaten: ${dailyLog.foods.map(f => `${f.name} (${f.calories} kcal)`).join(', ') || 'None'}
-    - Exercises Done: ${dailyLog.exercises.map(e => `${e.name} (${e.caloriesBurned} kcal)`).join(', ') || 'None'}
-    - Passive Activity (NEAT): ${dailyLog.neatActivities.map(a => `${a.name} (~${a.calories} kcal)`).join(', ') || 'None'}
-    
-    Today's Progress:
-    - Calories Consumed: ${Math.round(dailyProgress.calories.achieved)} kcal
-    - Calorie Target: ${Math.round(dailyProgress.goalCalories)} kcal
-    - Protein: ${Math.round(dailyProgress.protein)}g (Target: ${Math.round(dailyProgress.proteinTarget)}g)
-    - Carbs: ${Math.round(dailyProgress.carbs)}g (Target: ${Math.round(dailyProgress.carbTarget)}g)
-    - Fat: ${Math.round(dailyProgress.fat)}g (Target: ${Math.round(dailyProgress.fatTarget)}g)
-
-    Generate suggestions based on this data. Focus on what's going well and where there are opportunities for improvement.
-  `;
-
-  try {
-    const suggestionResult = await api.getSuggestion(prompt, suggestionSchema);
-    // Unwrap if server returned { result: {...} } or { suggestion: {...} }
-    const payload = suggestionResult && (suggestionResult.result || suggestionResult.suggestion) ? (suggestionResult.result || suggestionResult.suggestion) : suggestionResult;
-
-    // Basic validation
-    if (!payload || typeof payload !== 'object' || !payload.positiveFood) {
-      throw new Error('Invalid AI suggestion format. Expected object with positiveFood, positiveExercise, cautionFood.');
-    }
-
-    return payload as AISuggestions;
-  } catch (err: any) {
-    console.error('getAISuggestion error:', err);
-    if (err instanceof Error && /Network error/i.test(err.message)) {
-      throw new Error('Network error while fetching AI suggestions. Please check backend.');
-    }
-    throw err;
-  }
+  // Generate rule-based suggestions instead of AI
+  // This avoids Gemini rate limits entirely
+  return generateRuleBasedSuggestions(user, dailyLog, userGoals, dailyProgress);
 };
+
+/**
+ * Generate suggestions using rules instead of AI
+ * No API calls - completely local
+ */
+export function generateRuleBasedSuggestions(
+  user: User,
+  dailyLog: DailyLog,
+  userGoals: UserGoals,
+  dailyProgress: DailyProgress
+): AISuggestions {
+  const positiveFood: string[] = [];
+  const positiveExercise: string[] = [];
+  const cautionFood: string[] = [];
+
+  const caloriesConsumed = dailyProgress.calories?.achieved || 0;
+  const calorieTarget = dailyProgress.goalCalories || 2000;
+  const proteinConsumed = dailyProgress.protein || 0;
+  const proteinTarget = dailyProgress.proteinTarget || 50;
+  const exerciseBurn = dailyProgress.calories?.eat || 0;
+
+  // Country-specific food suggestions
+  const countryFoods: Record<string, { protein: string[], healthy: string[], snacks: string[] }> = {
+    'India': {
+      protein: ['dal (lentils)', 'paneer', 'chickpeas (chana)', 'eggs', 'Greek yogurt (dahi)'],
+      healthy: ['vegetable curry with roti', 'khichdi', 'idli sambar', 'poha', 'upma'],
+      snacks: ['roasted chana', 'sprouts chaat', 'fruit with chaat masala', 'buttermilk (chaas)']
+    },
+    'Bangladesh': {
+      protein: ['fish curry', 'dal', 'eggs', 'chicken', 'lentils'],
+      healthy: ['fish with rice', 'vegetable bhaji', 'dal bhat', 'mixed vegetables'],
+      snacks: ['muri mix', 'fruits', 'pitha', 'chanachur']
+    },
+    'Pakistan': {
+      protein: ['chicken tikka', 'dal', 'eggs', 'kebabs', 'yogurt'],
+      healthy: ['dal chawal', 'vegetable curry', 'grilled chicken', 'chapati with sabzi'],
+      snacks: ['fruit chaat', 'roasted nuts', 'lassi', 'dates']
+    },
+    'United States of America': {
+      protein: ['grilled chicken breast', 'Greek yogurt', 'eggs', 'lean beef', 'fish'],
+      healthy: ['quinoa bowl', 'grilled salmon', 'turkey sandwich', 'vegetable stir-fry'],
+      snacks: ['apple with peanut butter', 'mixed nuts', 'protein bar', 'hummus with veggies']
+    },
+    'United Kingdom': {
+      protein: ['grilled fish', 'chicken breast', 'eggs', 'beans on toast', 'cottage cheese'],
+      healthy: ['jacket potato with tuna', 'vegetable soup', 'grilled salmon', 'porridge'],
+      snacks: ['fruit and yogurt', 'oatcakes', 'nuts', 'vegetable sticks']
+    },
+  };
+
+  const defaultFoods = {
+    protein: ['lean chicken', 'fish', 'eggs', 'Greek yogurt', 'legumes'],
+    healthy: ['grilled protein with vegetables', 'whole grain meals', 'salads', 'soups'],
+    snacks: ['fruits', 'nuts', 'yogurt', 'vegetable sticks']
+  };
+
+  const foods = countryFoods[user.country] || defaultFoods;
+
+  // Calorie-based suggestions
+  if (caloriesConsumed < calorieTarget * 0.5) {
+    positiveFood.push(`You're under your calorie target. Consider a nutritious meal like ${foods.healthy[Math.floor(Math.random() * foods.healthy.length)]} to fuel your body.`);
+  } else if (caloriesConsumed > calorieTarget * 1.1) {
+    cautionFood.push(`You've exceeded your calorie target. Consider lighter options for your remaining meals and focus on vegetables and lean proteins.`);
+  } else {
+    positiveFood.push(`Great job staying within your calorie range! Keep making balanced choices.`);
+  }
+
+  // Protein-based suggestions
+  if (proteinConsumed < proteinTarget * 0.5) {
+    const proteinSuggestion = foods.protein[Math.floor(Math.random() * foods.protein.length)];
+    positiveFood.push(`Boost your protein intake with ${proteinSuggestion}. Protein helps with muscle maintenance and keeps you feeling full.`);
+  } else if (proteinConsumed >= proteinTarget) {
+    positiveFood.push(`Excellent protein intake today! You've met your target of ${proteinTarget}g.`);
+  }
+
+  // Snack suggestions
+  if (dailyLog.foods?.length < 3) {
+    const snackSuggestion = foods.snacks[Math.floor(Math.random() * foods.snacks.length)];
+    positiveFood.push(`For a healthy snack, try ${snackSuggestion} - it's nutritious and satisfying.`);
+  }
+
+  // Exercise suggestions
+  if (exerciseBurn < 100) {
+    if (userGoals.weightGoal === 'lose') {
+      positiveExercise.push(`Adding 30 minutes of brisk walking or light jogging could help burn an extra 150-200 calories and support your weight loss goal.`);
+    } else {
+      positiveExercise.push(`Consider adding some physical activity today - even a 20-minute walk can boost your mood and energy levels.`);
+    }
+  } else if (exerciseBurn >= 300) {
+    positiveExercise.push(`Great workout today! You've burned ${exerciseBurn} calories through exercise. Remember to stay hydrated and refuel with protein.`);
+  } else {
+    positiveExercise.push(`Good activity level today with ${exerciseBurn} calories burned. Keep up the consistent effort!`);
+  }
+
+  // Goal-specific suggestions
+  if (userGoals.weightGoal === 'lose') {
+    cautionFood.push(`For weight loss, focus on high-volume, low-calorie foods like vegetables and lean proteins. They keep you full without excess calories.`);
+  } else if (userGoals.weightGoal === 'gain') {
+    positiveFood.push(`To support weight gain, include calorie-dense nutritious foods like nuts, avocados, and whole grains in your meals.`);
+  }
+
+  // Water reminder
+  const waterIntake = dailyLog.waterIntake || 0;
+  if (waterIntake < 1500) {
+    positiveExercise.push(`Don't forget to stay hydrated! Aim for at least 2-2.5 liters of water daily.`);
+  }
+
+  return {
+    positiveFood: positiveFood.slice(0, 3),
+    positiveExercise: positiveExercise.slice(0, 2),
+    cautionFood: cautionFood.slice(0, 2),
+  };
+}

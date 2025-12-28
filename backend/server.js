@@ -8,6 +8,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const net = require('net');
+const fs = require('fs');
+const path = require('path');
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory');
+}
 
 let cookieParser;
 try {
@@ -39,14 +49,24 @@ try {
 const authRoutes = require('./routes/auth');
 const dataRoutes = require('./routes/data');
 const geminiRoutes = require('./routes/gemini');
+const chatRoutes = require('./routes/chat');
+const achievementRoutes = require('./routes/achievements');
+const insightsRoutes = require('./routes/insights');
+const leaderboardRoutes = require('./routes/leaderboard');
+const plannerRoutes = require('./routes/planner');
+const analyticsRoutes = require('./routes/analytics');
+const aiCoachRoutes = require('./routes/aicoach');
+const notificationsRoutes = require('./routes/notifications');
+const socialRoutes = require('./routes/social');
 
 const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
+app.use('/uploads', express.static('uploads'));
 app.use(
 	cors({
-		origin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000',
+		origin: process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3001',
 		credentials: true,
 	})
 );
@@ -59,36 +79,19 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Lightweight auth helper inlined to avoid missing files. If you add middleware file, prefer that.
-function verifyTokenFromReq(req) {
-	const token = (req.cookies && req.cookies.token) || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
-	if (!token) return null;
-	try {
-		const decoded = jwt.verify(token, process.env.JWT_SECRET);
-		// decoded should contain user id in your token generation logic
-		return decoded;
-	} catch (err) {
-		return null;
-	}
-}
-
-// Ensure a stable user endpoint so frontend gets a clear 200 or 401.
-app.get('/api/data/user', (req, res) => {
-	const decoded = verifyTokenFromReq(req);
-	if (!decoded || !decoded.id) {
-		// don't retry indefinitely on frontend — return proper 401
-		return res.status(401).json({ error: 'Unauthenticated' });
-	}
-	// Minimal response: the frontend needs a stable payload shape.
-	// You can replace this with a DB fetch to return full user data.
-	const user = { id: decoded.id }; // expand with name/email after querying DB
-	return res.status(200).json({ success: true, user });
-});
-
 // Attach API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/gemini', geminiRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/achievements', achievementRoutes);
+app.use('/api/insights', insightsRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/planner', plannerRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/aicoach', aiCoachRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/social', socialRoutes);
 
 // Health endpoints for monitoring and quick status checks
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -101,9 +104,29 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ msg: err.message || 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-	console.log(`Server running on port ${PORT}`);
+const startServer = async (port) => {
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on port ${port}`);
+    
+    // Start notification scheduler after server starts
+    const scheduler = require('./scheduler');
+    scheduler.start(1); // Run every 1 minute for activity reminders
+    console.log('Notification scheduler started');
+  }).on('error', async (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Port ${port} is in use, trying port ${port + 1}...`);
+      await new Promise(resolve => server.close(resolve));
+      await startServer(port + 1);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+};
+
+const PORT = parseInt(process.env.PORT || '5000', 10);
+startServer(PORT).catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
 
 // graceful error logs

@@ -49,9 +49,11 @@ function sendTokenAsCookie(res, token, userObj) {
 
 // Example sign-in / sign-up handler
 async function loginController(req, res, next) {
-	// ...existing code: validate credentials, create token, fetch user...
-	const token = generateJWT(foundUser.id);              // <-- replaces placeholder
-	return sendTokenAsCookie(res, token, foundUser);      // <-- replaces placeholder
+	// This controller is intentionally a lightweight placeholder.
+	// The primary auth routes are implemented in `routes/auth.js`.
+	// If this helper is invoked directly, return a clear 501 response
+	// instead of causing a ReferenceError due to missing local variables.
+	return res.status(501).json({ msg: 'loginController not implemented here; use /api/auth/login' });
 }
 
 module.exports = {

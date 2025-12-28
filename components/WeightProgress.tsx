@@ -10,18 +10,23 @@ interface WeightProgressProps {
 }
 
 const WeightProgress: React.FC<WeightProgressProps> = ({ currentWeight, targetWeight, startWeight, weightLog }) => {
-    if (!currentWeight || !targetWeight) {
+    // Ensure values are numbers
+    const currentWeightNum = Number(currentWeight);
+    const targetWeightNum = Number(targetWeight);
+    const startWeightNum = startWeight ? Number(startWeight) : null;
+
+    if (!currentWeightNum || !targetWeightNum) {
         return null;
     }
 
-    const effectiveStartWeight = typeof startWeight === 'number' ? startWeight : currentWeight;
-    
-    const totalChangeRequired = Math.abs(effectiveStartWeight - targetWeight);
+    const effectiveStartWeight = typeof startWeightNum === 'number' && !isNaN(startWeightNum) ? startWeightNum : currentWeightNum;
+
+    const totalChangeRequired = Math.abs(effectiveStartWeight - targetWeightNum);
 
     let progressPercentage = 0;
     if (totalChangeRequired > 0) {
-        progressPercentage = ((currentWeight - effectiveStartWeight) / (targetWeight - effectiveStartWeight)) * 100;
-    } else if (currentWeight === targetWeight) {
+        progressPercentage = ((currentWeightNum - effectiveStartWeight) / (targetWeightNum - effectiveStartWeight)) * 100;
+    } else if (currentWeightNum === targetWeightNum) {
         progressPercentage = 100;
     }
     
@@ -38,6 +43,9 @@ const WeightProgress: React.FC<WeightProgressProps> = ({ currentWeight, targetWe
                         <WeightIcon />
                         Weight Progress
                     </h2>
+                    <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-full">
+                        Auto-updated
+                    </span>
                 </div>
                  <div className="grid grid-cols-3 text-center text-sm font-semibold mb-2">
                     <div>
@@ -46,11 +54,11 @@ const WeightProgress: React.FC<WeightProgressProps> = ({ currentWeight, targetWe
                     </div>
                      <div>
                         <p className="text-emerald-500">Current</p>
-                        <p className="text-slate-800 dark:text-slate-200 text-2xl font-bold">{currentWeight.toFixed(1)} kg</p>
+                        <p className="text-slate-800 dark:text-slate-200 text-2xl font-bold">{currentWeightNum.toFixed(1)} kg</p>
                     </div>
                      <div>
                         <p className="text-slate-500 dark:text-slate-400">Target</p>
-                        <p className="text-slate-800 dark:text-slate-200 text-lg">{targetWeight.toFixed(1)} kg</p>
+                        <p className="text-slate-800 dark:text-slate-200 text-lg">{targetWeightNum.toFixed(1)} kg</p>
                     </div>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 relative mb-6">
@@ -70,24 +78,32 @@ const WeightProgress: React.FC<WeightProgressProps> = ({ currentWeight, targetWe
                      <div className="max-h-28 overflow-y-auto pr-2">
                      {recentLogs.length > 1 ? recentLogs.map((log, index) => {
                          const prevLog = recentLogs[index + 1];
-                         const change = prevLog ? log.weight - prevLog.weight : 0;
+                         const logWeight = Number(log.weight);
+                         const prevWeight = prevLog ? Number(prevLog.weight) : 0;
+                         const change = prevLog ? logWeight - prevWeight : 0;
                          const changeColor = change > 0.01 ? 'text-red-500' : change < -0.01 ? 'text-emerald-500' : 'text-slate-500';
-                         
+
                          return (
                             <div key={log.date} className="text-sm text-slate-800 dark:text-slate-200 px-3 py-1.5 grid grid-cols-3 gap-2">
                                 <span>{new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                <span className="text-right font-medium">{log.weight.toFixed(2)} kg</span>
+                                <span className="text-right font-medium">{logWeight.toFixed(2)} kg</span>
                                 <span className={`text-right ${changeColor}`}>{change.toFixed(2)} kg</span>
                            </div>
                          )
                      }) : (
                         <p className="text-center text-sm text-slate-500 dark:text-slate-400 py-4">
-                            Your daily weight will be calculated here as you log your progress.
+                            Log food or exercise to see projected weight
                         </p>
                      )}
                      </div>
                 </div>
-
+                
+                {/* Info about auto-calculation */}
+                <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                    <p className="text-xs text-blue-700 dark:text-blue-400">
+                        💡 Weight updates instantly after each food/exercise log based on calorie balance (7700 cal = 1 kg)
+                    </p>
+                </div>
             </div>
         </div>
     );
